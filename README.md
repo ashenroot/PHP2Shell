@@ -1,7 +1,5 @@
 # PHP2Shell: CVE-2026-109618 / CVE-2026-109619 Detection Tooling
 
-Authorized Engagement Use Only
-
 Passive triage tooling for CVE-2026-109618 and CVE-2026-109619 (critical unauthenticated RCE in PHP via OOM corruption and stale global state).
 
 ---
