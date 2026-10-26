@@ -194,18 +194,6 @@ The `--min-score` and `--buckets` flags control what is shown on the console. JS
 
 ---
 
-## Recommended workflow
-
-```
-1. Run php2shell_triage.py across all customer-scoped targets
-2. Deliver CONFIRMED_VULNERABLE and LIKELY_PHP lists to customer
-3. Customer runs credentialed Nessus scan (plugin 369483) on those hosts
-4. POSSIBLE_PHP hosts: confirm PHP stack with customer, then escalate or deprioritize
-5. Document findings; reference CVE-2026-109618 and CVE-2026-109619 in report
-```
-
----
-
 ## Requirements
 
 Python 3.8+, stdlib only. No external dependencies.
