@@ -1,8 +1,8 @@
-# PHP2Shell — CVE-2026-109618 / CVE-2026-109619 Detection Tooling
+# PHP2Shell: CVE-2026-109618 / CVE-2026-109619 Detection Tooling
 
 Authorized Engagement Use Only
 
-Passive triage tooling for CVE-2026-109618 and CVE-2026-109619 — critical unauthenticated RCE in PHP via OOM corruption and stale global state.
+Passive triage tooling for CVE-2026-109618 and CVE-2026-109619 (critical unauthenticated RCE in PHP via OOM corruption and stale global state).
 
 ---
 
@@ -28,7 +28,7 @@ Passive triage tooling for CVE-2026-109618 and CVE-2026-109619 — critical unau
 | PHP 8.3.x | 8.3.36 |
 | PHP 8.2.x | 8.2.35 |
 | PHP 7.4.x – 8.1.x | No official release; minimal source backports only |
-| PHP ≤ 7.3.x | End-of-life; no fix |
+| PHP <= 7.3.x | End-of-life; no fix |
 
 **Interim mitigations (not a complete fix):**
 - CVE-2026-109618: `memory_limit=-1` (must not be overridable by application)
@@ -41,13 +41,13 @@ Passive triage tooling for CVE-2026-109618 and CVE-2026-109619 — critical unau
 
 ## Tools
 
-### `php2shell_triage.py` — Passive Triage Scanner
+### `php2shell_triage.py`: Passive Triage Scanner
 
 Zero-risk passive sweep for CVE-2026-109618 / CVE-2026-109619. No payloads. No session manipulation.
 
 **Signals collected (all passive):**
 - PHP version in `X-Powered-By` / `Server` headers
-- `PHPSESSID` cookie (default PHP session cookie — Session Upload Progress surface)
+- `PHPSESSID` cookie (default PHP session cookie; Session Upload Progress surface)
 - PHP error page output in 404 / probe responses
 - `.php` URL references in response body
 - CMS/framework fingerprints (WordPress, Laravel, Drupal, Joomla, Symfony, Magento, CodeIgniter, CakePHP)
@@ -60,10 +60,10 @@ Zero-risk passive sweep for CVE-2026-109618 / CVE-2026-109619. No payloads. No s
 | `CONFIRMED_VULNERABLE` | PHP version disclosed, below fix threshold |
 | `CONFIRMED_PATCHED` | PHP version disclosed, at or above fix threshold |
 | `LIKELY_PHP` | Strong PHP signals, version not disclosed |
-| `POSSIBLE_PHP` | Weaker signals — PHPSESSID, `.php` refs, CMS patterns |
+| `POSSIBLE_PHP` | Weaker signals (PHPSESSID, `.php` refs, CMS patterns) |
 | `UNLIKELY` | No PHP indicators |
 
-**Scoring (scored path only — version-confirmed skips scoring):**
+**Scoring (scored path only; version-confirmed skips scoring):**
 
 | Signal | Points |
 |---|---|
@@ -75,9 +75,9 @@ Zero-risk passive sweep for CVE-2026-109618 / CVE-2026-109619. No payloads. No s
 | PHP / framework keywords in body | +10 |
 | Interesting disclosure paths | +5 |
 
-Thresholds: `LIKELY_PHP` ≥ 40 · `POSSIBLE_PHP` ≥ 10
+Thresholds: `LIKELY_PHP` >= 40 · `POSSIBLE_PHP` >= 10
 
-A note on `PHPSESSID`: the cookie alone (30 pts) puts a target in `POSSIBLE_PHP`, not `LIKELY_PHP`. It takes a PHP header *or* a CMS fingerprint on top of that to reach the `LIKELY_PHP` threshold (40 pts). Nearly all default PHP installs expose PHPSESSID, so `POSSIBLE_PHP` is a broad net; `LIKELY_PHP` is the high-confidence tier.
+A note on `PHPSESSID`: the cookie alone (30 pts) puts a target in `POSSIBLE_PHP`, not `LIKELY_PHP`. It takes a PHP header or a CMS fingerprint on top of that to reach the `LIKELY_PHP` threshold (40 pts). Nearly all default PHP installs expose PHPSESSID, so `POSSIBLE_PHP` is a broad net; `LIKELY_PHP` is the high-confidence tier.
 
 **Exit codes:** `2` = confirmed vulnerable · `1` = likely candidates · `0` = clean (CI integration)
 
@@ -93,7 +93,7 @@ python3 php2shell_triage.py --input targets.txt --workers 10
 # Output to JSON + CSV for reporting
 python3 php2shell_triage.py --input targets.txt --json results.json --csv results.csv
 
-# Verbose — show all signals per target
+# Verbose: show all signals per target
 python3 php2shell_triage.py --input targets.txt --verbose
 
 # Only show results scoring 30+ (version-confirmed always passes through)
@@ -107,45 +107,45 @@ python3 php2shell_triage.py --input targets.txt --buckets CONFIRMED_VULNERABLE,L
 
 ## Understanding the scoring system
 
-The scanner uses a point-based triage model built around a core question: *how much does this signal actually constrain the PHP attack surface?* High-weight signals are ones that are nearly impossible to produce without PHP actually serving the request, or that directly implicate the specific exposure paths for CVE-2026-109618 and CVE-2026-109619.
+Signal weights reflect how much each indicator actually constrains the PHP attack surface. High-weight signals are structurally difficult to produce without PHP directly handling the request, or directly implicate the exposure paths for CVE-2026-109618 and CVE-2026-109619.
 
 ### Why each signal is weighted the way it is
 
 **PHP in `X-Powered-By` / `Server` header (+40 — LIKELY threshold alone)**
-`X-Powered-By: PHP/x.y.z` is emitted by PHP itself and cannot be injected by a proxy or reverse proxy that isn't running PHP. Its presence is the single strongest passive indicator that PHP is directly handling the request. If this header includes a version, the result goes to `CONFIRMED_VULNERABLE` or `CONFIRMED_PATCHED` instead of the scoring path — the +40 only counts when no version is present (e.g. `X-Powered-By: PHP` with version disclosure disabled).
+`X-Powered-By: PHP/x.y.z` is emitted by PHP itself and cannot be injected by a proxy that isn't running PHP. Its presence is the strongest passive indicator that PHP is directly handling the request. If this header includes a version, the result goes to `CONFIRMED_VULNERABLE` or `CONFIRMED_PATCHED` instead of the scoring path. The +40 only applies when no version is present (e.g. `X-Powered-By: PHP` with version disclosure disabled).
 
 **`PHPSESSID` cookie (+30)**
-The default PHP session cookie name, set when `session_start()` is called. Its presence indicates that PHP session handling is active — which is directly relevant because CVE-2026-109619 (stale global state / use-after-free) is confirmed triggerable via PHP's Session Upload Progress feature, enabled by default. Important caveat: `PHPSESSID` alone (30 pts) lands in `POSSIBLE_PHP`, not `LIKELY_PHP` — the threshold is 40. Nearly all default PHP installs emit this cookie, so it's a useful signal but a broad one. It takes a PHP header or a CMS fingerprint on top of PHPSESSID to cross into `LIKELY_PHP`.
+The default PHP session cookie name, set when `session_start()` is called. Its presence indicates PHP session handling is active, which is relevant because CVE-2026-109619 (stale global state / use-after-free) is confirmed triggerable via PHP's Session Upload Progress feature, enabled by default. `PHPSESSID` alone (30 pts) lands in `POSSIBLE_PHP`, not `LIKELY_PHP` (threshold 40). Nearly all default PHP installs emit this cookie, so it's a broad signal. It takes a PHP header or a CMS fingerprint on top of PHPSESSID to cross into `LIKELY_PHP`.
 
 **CMS / framework fingerprint (+25)**
-WordPress, Laravel, Drupal, Joomla, Symfony, Magento, CodeIgniter, CakePHP — all PHP-native stacks. Detecting one of these in a header, generator tag, or response body is high-confidence evidence of PHP. It's weighted +25 rather than +40 because CMS names occasionally appear in response bodies as documentation references or proxied content, so the signal isn't quite as structural as the PHP header itself. Combined with PHPSESSID, a CMS fingerprint pushes a target into `LIKELY_PHP`.
+WordPress, Laravel, Drupal, Joomla, Symfony, Magento, CodeIgniter, CakePHP are all PHP-native stacks. Detecting one of these in a header, generator tag, or response body is high-confidence evidence of PHP. Weighted +25 rather than +40 because CMS names occasionally appear in response bodies as documentation references or proxied content, so the signal isn't as structural as the PHP header itself. Combined with PHPSESSID, a CMS fingerprint pushes a target into `LIKELY_PHP`.
 
 **PHP error output (+20)**
-Unhandled exceptions and notices from PHP itself — `Fatal error:`, `Parse error:`, `Warning:`, `Notice:` followed by a `.php` file path and line number. These patterns are definitive evidence of PHP execution and also a sign of a poorly hardened deployment, which correlates with unpatched versions. Weighted +20 because they require a specific response condition (an uncaught error) rather than being always-present.
+Unhandled exceptions and notices from PHP itself (`Fatal error:`, `Parse error:`, `Warning:`, `Notice:` followed by a `.php` file path and line number). These patterns are definitive evidence of PHP execution and also a sign of a poorly hardened deployment, which correlates with unpatched versions. Weighted +20 because they require a specific response condition (an uncaught error) rather than being always-present.
 
 **`.php` URL references in response body (+15)**
-`href`, `src`, or form `action` values pointing to `.php` endpoints. Indicates the application exposes a PHP-based URL structure. Lower weight than structural headers because `.php` URLs can appear in documentation, cached pages served from CDNs, or marketing content for PHP products, but it's a solid corroborating signal.
+`href`, `src`, or form `action` values pointing to `.php` endpoints, indicating the application exposes a PHP-based URL structure. Lower weight than structural headers because `.php` URLs can appear in documentation, cached pages served from CDNs, or marketing content for PHP products, but it's a solid corroborating signal.
 
 **PHP / framework keywords in body (+10)**
-Broader PHP-related patterns in response body — framework version strings, PHP meta generators, `<?php` fragments (misconfigured server), CMS generator tags. Weighted low because this is the most permissive pattern category and can produce false positives from proxy-served content.
+Broader PHP-related patterns in response body: framework version strings, PHP meta generators, `<?php` fragments (misconfigured server), CMS generator tags. Weighted low because this is the most permissive pattern category and can produce false positives from proxy-served content.
 
 **Interesting disclosure paths (+5)**
-Non-404 responses to paths like `/phpinfo.php`, `/info.php`, `/readme.html` (WordPress), `/.env` (Laravel), etc. These endpoints being reachable is diagnostically useful — if they're serving content, there's likely something to find — but the content they return is captured by the version and body signals above. The path signal is a weak additive hint.
+Non-404 responses to paths like `/phpinfo.php`, `/info.php`, `/readme.html` (WordPress), `/.env` (Laravel), etc. These endpoints being reachable is diagnostically useful, but the content they return is captured by the version and body signals above. Weak additive signal only.
 
 ### How buckets work
 
-The scoring path only runs when no PHP version string is found. If a version is disclosed — from any header, response body, error page, or disclosure path — the result goes directly to `CONFIRMED_VULNERABLE` or `CONFIRMED_PATCHED` based on the threshold table, bypassing scoring entirely.
+The scoring path only runs when no PHP version string is found. If a version is disclosed from any header, response body, error page, or disclosure path, the result goes directly to `CONFIRMED_VULNERABLE` or `CONFIRMED_PATCHED`, bypassing scoring entirely.
 
 For scored results:
-- **LIKELY_PHP (≥ 40):** At least one high-confidence structural indicator. The PHP header alone gets you here. Prioritize these for customer follow-up and Nessus plugin 369483.
-- **POSSIBLE_PHP (≥ 10, < 40):** Weaker or broader signals — PHPSESSID alone, `.php` URL refs, CMS body patterns. Worth documenting, but lower priority without version confirmation.
+- **LIKELY_PHP (>= 40):** At least one high-confidence structural indicator. The PHP header alone gets you here. Prioritize these for customer follow-up and Nessus plugin 369483.
+- **POSSIBLE_PHP (>= 10, < 40):** Weaker or broader signals (PHPSESSID alone, `.php` URL refs, CMS body patterns). Worth documenting, but lower priority without version confirmation.
 - **UNLIKELY (< 10):** No meaningful PHP indicators. Keep in the output to account for all scanned targets.
 
 ### Worked examples
 
 | Signals observed | Score | Bucket |
 |---|---|---|
-| Version disclosed: PHP 8.3.10 | — | `CONFIRMED_VULNERABLE` (bypasses scoring) |
+| Version disclosed: PHP 8.3.10 | n/a | `CONFIRMED_VULNERABLE` (bypasses scoring) |
 | PHP header (no version) | 40 | `LIKELY_PHP` |
 | PHPSESSID + WordPress fingerprint | 55 | `LIKELY_PHP` |
 | PHPSESSID + `.php` URL refs | 45 | `LIKELY_PHP` |
@@ -155,15 +155,15 @@ For scored results:
 
 ### Using `--min-score` effectively
 
-The default (no filter) is usually the right starting point — let the scan run over everything and use `--min-score` to tighten the feed for a specific workflow:
+The default (no filter) is the right starting point for most engagements. Use `--min-score` to tighten the feed for a specific workflow:
 
 - `--min-score 40`: equivalent to "only LIKELY_PHP and above" in the scored tier (version-confirmed always passes)
 - `--min-score 25`: cuts low-confidence POSSIBLE_PHP while keeping targets with two or more corroborating signals
 - `--min-score 10`: default behavior for scored results
 
-Given that `POSSIBLE_PHP` casts a wide net (PHPSESSID appears on nearly every default PHP install), `--min-score 25` is often a useful operational setting when scanning large target lists where you want to prioritize without losing meaningful candidates.
+`POSSIBLE_PHP` casts a wide net since PHPSESSID appears on nearly every default PHP install. On large target lists, `--min-score 25` is often a practical setting to reduce noise without dropping meaningful candidates.
 
-Version-confirmed results always pass regardless of `--min-score`. A high threshold will never suppress a `CONFIRMED_VULNERABLE`.
+Version-confirmed results always pass regardless of `--min-score`.
 
 ---
 
@@ -171,12 +171,12 @@ Version-confirmed results always pass regardless of `--min-score`. A high thresh
 
 ### `--min-score N`
 
-Filter console output to scored results with `score >= N`. Version-confirmed results (`CONFIRMED_VULNERABLE` / `CONFIRMED_PATCHED`) always pass regardless of `N` — they have no score and should never be suppressed.
+Filter console output to scored results with `score >= N`. Version-confirmed results (`CONFIRMED_VULNERABLE` / `CONFIRMED_PATCHED`) always pass regardless of `N`; they have no score and are never filtered.
 
 JSON and CSV output always contains all results regardless of this flag.
 
 ```bash
-# Cut the noise — suppress POSSIBLE_PHP results scoring < 25
+# Suppress POSSIBLE_PHP results scoring < 25
 python3 php2shell_triage.py --input targets.txt --min-score 25
 ```
 
@@ -185,10 +185,10 @@ python3 php2shell_triage.py --input targets.txt --min-score 25
 Restrict console output to the named bucket(s). Valid names: `CONFIRMED_VULNERABLE`, `CONFIRMED_PATCHED`, `LIKELY_PHP`, `POSSIBLE_PHP`, `UNLIKELY`, `ERROR`.
 
 ```bash
-# Hot targets only — skip everything below LIKELY_PHP
+# Skip everything below LIKELY_PHP
 python3 php2shell_triage.py --input targets.txt --buckets CONFIRMED_VULNERABLE,LIKELY_PHP
 
-# Combine with min-score for a tight feed
+# Combine with min-score
 python3 php2shell_triage.py --input targets.txt --buckets LIKELY_PHP,POSSIBLE_PHP --min-score 20
 ```
 
@@ -210,7 +210,7 @@ The `--min-score` and `--buckets` flags control what is shown on the console. JS
 
 ## Requirements
 
-Python 3.8+, stdlib only — no external dependencies.
+Python 3.8+, stdlib only. No external dependencies.
 
 ```bash
 python3 php2shell_triage.py --help
