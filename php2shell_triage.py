@@ -207,7 +207,12 @@ def http_get(host, port, use_tls, path, timeout=8, method="GET"):
             sock = _tls_ctx.wrap_socket(sock, server_hostname=host)
         sock.sendall(req)
         buf = b""
+        deadline = time.monotonic() + timeout
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sock.settimeout(remaining)
             chunk = sock.recv(8192)
             if not chunk:
                 break
@@ -416,6 +421,10 @@ def collect_signals(host, port, use_tls, timeout):
                 host, port, use_tls, vpath,
                 timeout=max(3, timeout // 2))
             if ve or vc in (404, 403, 405, None):
+                continue
+            # Skip HTML responses — SPA catch-all routing returns 200 text/html
+            # for every path; these are not PHP endpoints and produce false positives
+            if "text/html" in vh.get("content-type", ""):
                 continue
             signals["interesting_paths"].append(f"{vpath} ({vc})")
             vb_text = vb[:16384].decode("utf-8", errors="replace")
@@ -698,13 +707,16 @@ def worker(q, results, lock, timeout, verbose, min_score, bucket_filter):
     while True:
         item = q.get()
         if item is None:
+            q.task_done()
             break
-        r = scan_target(item, timeout=timeout)
-        with lock:
-            results.append(r)
-            if passes_filters(r, min_score, bucket_filter):
-                print_result(r, verbose=verbose)
-        q.task_done()
+        try:
+            r = scan_target(item, timeout=timeout)
+            with lock:
+                results.append(r)
+                if passes_filters(r, min_score, bucket_filter):
+                    print_result(r, verbose=verbose)
+        finally:
+            q.task_done()
 
 
 # ---------------------------------------------------------------------------
